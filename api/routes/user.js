@@ -3,10 +3,37 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const User = require('../model/user');
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const fs = require('fs');
 
+const FILE_TYPE_MAP = {
+    'image/png': 'png',
+    'image/jpeg': 'jpeg',
+    'image/jpg': 'jpg'
+};
 
+// Ensure "public/profilepic" exists
+const uploadDir = 'public/profilepic';
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const isValid = FILE_TYPE_MAP[file.mimetype];
+        let uploadError = isValid ? null : new Error('Invalid image type');
+        cb(uploadError, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const fileName = file.originalname.split(' ').join('-');
+        const extension = FILE_TYPE_MAP[file.mimetype];
+        cb(null, `${fileName}-${Date.now()}.${extension}`);
+    }
+});
+
+const uploadOptions = multer({ storage: storage });
 
 const CounterSchema = mongoose.Schema({
     _id: { type: String, required: true },
@@ -24,26 +51,23 @@ async function generateUniqueId() {
     return `WI${counter.seq}`;
 }
 
+// ✅ GET all users (excluding passwords)
 router.get('/all', async (req, res) => {
     try {
-        const users = await User.find({}, '-password');  
+        const users = await User.find({}, '-password');
         res.status(200).json(users);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-
-
-router.post('/signup', async (req, res, next) => {
+// ✅ SIGNUP (New User Registration)
+router.post('/signup', async (req, res) => {
     try {
-        
-        const existingUser  = await User.findOne({ email: req.body.email });
+        const existingUser = await User.findOne({ email: req.body.email });
 
-        if (existingUser ) {
-            return res.status(409).json({
-                message: 'Email not available'
-            });
+        if (existingUser) {
+            return res.status(409).json({ message: 'Email not available' });
         }
 
         const hash = await bcrypt.hash(req.body.password, 10);
@@ -53,37 +77,31 @@ router.post('/signup', async (req, res, next) => {
             _id: new mongoose.Types.ObjectId(),
             userId: uniqueId,
             password: hash,
-            email: req.body.email
+            name: req.body.name,
+            email: req.body.email,
+            phoneNumber: req.body.phoneNumber
         });
 
         const result = await user.save();
-        res.status(200).json({
-            new_user: result
-        });
+        res.status(200).json({ new_user: result });
     } catch (err) {
-        res.status(500).json({
-            error: err.message
-        });
+        res.status(500).json({ error: err.message });
     }
 });
 
-router.post('/login', async (req, res, next) => {
+// ✅ LOGIN
+router.post('/login', async (req, res) => {
     try {
-     
         const user = await User.findOne({ email: req.body.email });
 
         if (!user) {
-            return res.status(401).json({
-                message: 'User does not exist'
-            });
+            return res.status(401).json({ message: 'User does not exist' });
         }
 
         const isPasswordValid = await bcrypt.compare(req.body.password, user.password);
-        
+
         if (!isPasswordValid) {
-            return res.status(401).json({
-                message: 'Invalid password'
-            });
+            return res.status(401).json({ message: 'Invalid password' });
         }
 
         const token = jwt.sign(
@@ -94,17 +112,89 @@ router.post('/login', async (req, res, next) => {
 
         res.status(200).json({
             email: user.email,
-            userId:user.userId,
-            token: token
+            userId: user.userId,
+            _id: user._id,
+            token: token,
+            name: user.name,
+            phoneNumber: user.phoneNumber,
+            dateOfBirth: user.dateOfBirth,
+            gender: user.gender,
+            address: user.address,
+            profileImg: user.profileImg,
+            city: user.city,
+            state: user.state,
+            country: user.country,
+            pincode: user.pincode
         });
 
     } catch (err) {
-        res.status(500).json({
-            error: err.message
-        });
+        res.status(500).json({ error: err.message });
     }
 });
 
+// ✅ UPDATE USER (PUT Method)
+router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const existingUser = await User.findById(userId);
 
+        if (!existingUser) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        let updatedFields = {
+            name: req.body.name || existingUser.name,
+            email: req.body.email || existingUser.email,
+            phoneNumber: req.body.phoneNumber || existingUser.phoneNumber,
+            dateOfBirth: req.body.dateOfBirth || existingUser.dateOfBirth,
+            gender: req.body.gender || existingUser.gender,
+            address: req.body.address || existingUser.address,
+            city: req.body.city || existingUser.city,
+            state: req.body.state || existingUser.state,
+            country: req.body.country || existingUser.country,
+            pincode: req.body.pincode || existingUser.pincode
+        };
+
+        // ✅ Only update profile image if file is uploaded
+        if (req.file) {
+            const fileName = req.file.filename;
+            const basePath = `${req.protocol}://${req.get('host')}/public/profilepic/`;
+            updatedFields.profileImg = `${basePath}${fileName}`;
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(userId, updatedFields, { new: true });
+
+        res.status(200).json({ message: 'User updated successfully', user: updatedUser });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ✅ DELETE USER
+router.delete('/delete/:id', async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // ✅ Delete profile picture if exists
+        if (user.profileImg) {
+            const filePath = `public/profilepic/${user.profileImg.split('/').pop()}`;
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        await User.findByIdAndDelete(userId);
+        res.status(200).json({ message: 'User deleted successfully' });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 module.exports = router;
