@@ -14,7 +14,6 @@ const FILE_TYPE_MAP = {
     'image/jpg': 'jpg'
 };
 
-// Ensure "public/profilepic" exists
 const uploadDir = 'public/profilepic';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -51,7 +50,6 @@ async function generateUniqueId() {
     return `WI${counter.seq}`;
 }
 
-// ✅ GET all users (excluding passwords)
 router.get('/all', async (req, res) => {
     try {
         const users = await User.find({}, '-password');
@@ -60,9 +58,7 @@ router.get('/all', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-// ✅ SIGNUP (New User Registration)
-router.post('/signup', async (req, res) => {
+router.post('/signup', uploadOptions.single('image'), async (req, res) => {
     try {
         const existingUser = await User.findOne({ email: req.body.email });
 
@@ -73,13 +69,28 @@ router.post('/signup', async (req, res) => {
         const hash = await bcrypt.hash(req.body.password, 10);
         const uniqueId = await generateUniqueId();
 
+        let profileImg = '';
+        if (req.file) {
+            const fileName = req.file.filename;
+            const basePath = `${req.protocol}://${req.get('host')}/public/profilepic/`;
+            profileImg = `${basePath}${fileName}`;
+        }
+
         const user = new User({
             _id: new mongoose.Types.ObjectId(),
             userId: uniqueId,
             password: hash,
             name: req.body.name,
             email: req.body.email,
-            phoneNumber: req.body.phoneNumber
+            phoneNumber: req.body.phoneNumber,
+            dateOfBirth: req.body.dateOfBirth,
+            gender: req.body.gender,
+            address: req.body.address,
+            city: req.body.city,
+            state: req.body.state,
+            country: req.body.country,
+            pincode: req.body.pincode,
+            profileImg: profileImg
         });
 
         const result = await user.save();
@@ -88,6 +99,7 @@ router.post('/signup', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 
 // ✅ LOGIN
 router.post('/login', async (req, res) => {
@@ -132,7 +144,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// ✅ UPDATE USER (PUT Method)
+
 router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
     try {
         const userId = req.params.id;
@@ -155,7 +167,7 @@ router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
             pincode: req.body.pincode || existingUser.pincode
         };
 
-        // ✅ Only update profile image if file is uploaded
+        
         if (req.file) {
             const fileName = req.file.filename;
             const basePath = `${req.protocol}://${req.get('host')}/public/profilepic/`;
@@ -171,7 +183,7 @@ router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
     }
 });
 
-// ✅ DELETE USER
+
 router.delete('/delete/:id', async (req, res) => {
     try {
         const userId = req.params.id;
@@ -181,7 +193,7 @@ router.delete('/delete/:id', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // ✅ Delete profile picture if exists
+       
         if (user.profileImg) {
             const filePath = `public/profilepic/${user.profileImg.split('/').pop()}`;
             if (fs.existsSync(filePath)) {
