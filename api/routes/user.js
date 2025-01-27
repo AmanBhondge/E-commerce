@@ -59,6 +59,24 @@ router.get('/all', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// Get user by ID
+router.get('/:id',checkAuth, async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const user = await User.findById(userId).select('-password'); // Exclude the password from the response
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json(user);
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.post('/signup', uploadOptions.single('image'), async (req, res) => {
     try {
         const existingUser = await User.findOne({ email: req.body.email });
