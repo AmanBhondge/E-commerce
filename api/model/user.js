@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const userSchema = mongoose.Schema({
     _id: mongoose.Schema.Types.ObjectId,
     userId: { type: String, unique: true, required: true },
-    name: { type: String, required: true },
+    name: { type: String},
     email: { type: String, unique: true, required: true },
     password: { type: String, required: true },
     phoneNumber: {type: String, required: true},

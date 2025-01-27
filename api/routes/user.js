@@ -7,12 +7,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const fs = require('fs');
+const checkAuth = require('../middleware/check-auth')
 
 const FILE_TYPE_MAP = {
     'image/png': 'png',
     'image/jpeg': 'jpeg',
     'image/jpg': 'jpg'
-};
+}; 
 
 const uploadDir = 'public/profilepic';
 if (!fs.existsSync(uploadDir)) {
@@ -145,7 +146,7 @@ router.post('/login', async (req, res) => {
 });
 
 
-router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
+router.put('/update/:id', uploadOptions.single('image'), checkAuth, async (req, res) => {
     try {
         const userId = req.params.id;
         const existingUser = await User.findById(userId);
@@ -184,7 +185,7 @@ router.put('/update/:id', uploadOptions.single('image'), async (req, res) => {
 });
 
 
-router.delete('/delete/:id', async (req, res) => {
+router.delete('/delete/:id', checkAuth, async (req, res) => {
     try {
         const userId = req.params.id;
         const user = await User.findById(userId);
